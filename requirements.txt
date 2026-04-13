@@ -1,0 +1,3 @@
+pywizlight
+fastapi
+uvicorn
