@@ -38,3 +38,13 @@ def parse_warna(warna: Union[str, ColorModel]) -> ColorModel:
             logger.error(f"Gagal memparse field Warna: {e}")
             raise ValueError(f"Format JSON 'Warna' tidak valid: {e}")
     return warna
+
+# --- Relay Models ---
+class RelayControlRequest(BaseModel):
+    device_name: str
+    channel: int
+    state: str  # "ON" atau "OFF"
+
+class BulkControlRequest(BaseModel):
+    device_name: str
+    state: str  # "ON" atau "OFF"

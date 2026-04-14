@@ -2,8 +2,9 @@ import logging
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from models import ControlRequest, parse_warna
+from models import ControlRequest, parse_warna, RelayControlRequest, BulkControlRequest
 from bulb_service import WizManager
+from relay_service import RelayManager
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -20,8 +21,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Configuration: Inisialisasi Manager untuk banyak lampu
+# Configuration: Inisialisasi Manager
 wiz_manager = WizManager("devices.json")
+relay_manager = RelayManager("devices.json")
 
 @app.post("/control")
 async def control_lights(request: ControlRequest):
@@ -87,9 +89,44 @@ async def get_all_status():
 async def list_devices():
     """Mengembalikan daftar perangkat yang terdaftar di konfigurasi."""
     return {
-        "count": len(wiz_manager.services),
-        "devices": [{"name": s.name, "ip": s.ip_address} for s in wiz_manager.services]
+        "wiz_count": len(wiz_manager.services),
+        "relay_count": len(relay_manager.services),
+        "wiz_devices": [{"name": s.name, "ip": s.ip_address} for s in wiz_manager.services],
+        "relay_devices": [{"name": s.name, "ip": s.ip_address} for s in relay_manager.services]
     }
+
+# --- Relay Routes ---
+@app.get("/relay/status")
+async def get_relay_status():
+    try:
+        results = []
+        for service in relay_manager.services:
+            status = await service.get_status()
+            results.append(status)
+        return {"relays": results}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/relay/control")
+async def control_relay(request: RelayControlRequest):
+    service = relay_manager.get_service_by_name(request.device_name)
+    if not service:
+        raise HTTPException(status_code=404, detail=f"Device {request.device_name} tidak ditemukan")
+    
+    if request.channel < 1 or request.channel > 4:
+         raise HTTPException(status_code=400, detail="Channel harus antara 1-4")
+
+    result = await service.control_channel(request.channel, request.state)
+    return result
+
+@app.post("/relay/control-all")
+async def control_all_relays(request: BulkControlRequest):
+    service = relay_manager.get_service_by_name(request.device_name)
+    if not service:
+        raise HTTPException(status_code=404, detail=f"Device {request.device_name} tidak ditemukan")
+    
+    result = await service.control_all(request.state)
+    return result
 
 if __name__ == "__main__":
     import uvicorn

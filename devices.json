@@ -1,12 +1,19 @@
 {
-    "devices": [
+    "wiz_devices": [
         {
             "name": "Controller_1",
-            "ip": "10.1.45.59"
+            "ip": "192.168.1.200"
         },
         {
             "name": "Controller_2",
-            "ip": "10.1.44.187"
+            "ip": "192.168.1.41"
+        }
+    ],
+    "relay_devices": [
+        {
+            "name": "Relay",
+            "ip": "192.168.1.161",
+            "channels": 4
         }
     ]
 }

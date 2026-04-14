@@ -7,7 +7,7 @@ from models import ColorModel
 logger = logging.getLogger(__name__)
 
 class WizService:
-    def __init__(self, ip_address: str, name: str = "Unknown", max_retries: int = 5):
+    def __init__(self, ip_address: str, name: str = "Unknown", max_retries: int = 10):
         self.ip_address = ip_address
         self.name = name
         self.max_retries = max_retries
@@ -87,23 +87,26 @@ class WizManager:
         try:
             with open(config_path, "r") as f:
                 config = json.load(f)
-                for dev in config.get("devices", []):
-                    self.services.append(WizService(dev["ip"], dev["name"], max_retries=5))
+                for dev in config.get("wiz_devices", []):
+                    self.services.append(WizService(dev["ip"], dev["name"]))
             logger.info(f"WizManager diinisialisasi dengan {len(self.services)} perangkat.")
         except Exception as e:
             logger.error(f"Gagal memuat config devices: {e}")
 
     async def broadcast_turn_on(self, color: ColorModel = None, brightness: int = None):
-        """Mengirim perintah NYALA ke semua lampu secara paralel."""
+        """Mengirim perintah NYALA ke semua lampu secara PARALEL agar tidak saling menunggu."""
         tasks = [service.turn_on(color, brightness) for service in self.services]
-        return await asyncio.gather(*tasks, return_exceptions=True)
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        return results
 
     async def broadcast_turn_off(self):
-        """Mengirim perintah MATI ke semua lampu secara paralel."""
+        """Mengirim perintah MATI ke semua lampu secara PARALEL."""
         tasks = [service.turn_off() for service in self.services]
-        return await asyncio.gather(*tasks, return_exceptions=True)
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        return results
 
     async def get_all_statuses(self):
-        """Mengambil status semua lampu secara paralel."""
+        """Mengambil status semua lampu secara PARALEL."""
         tasks = [service.get_status() for service in self.services]
-        return await asyncio.gather(*tasks, return_exceptions=True)
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        return results
