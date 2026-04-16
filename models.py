@@ -48,3 +48,9 @@ class RelayControlRequest(BaseModel):
 class BulkControlRequest(BaseModel):
     device_name: str
     state: str  # "ON" atau "OFF"
+
+# --- AC Models ---
+class ACControlRequest(BaseModel):
+    device_name: str
+    power: str = "ON"       # "ON" atau "OFF"
+    temperature: int = 24   # 16 - 30

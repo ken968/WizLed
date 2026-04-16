@@ -2,9 +2,10 @@ import logging
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from models import ControlRequest, parse_warna, RelayControlRequest, BulkControlRequest
+from models import ControlRequest, parse_warna, RelayControlRequest, BulkControlRequest, ACControlRequest
 from bulb_service import WizManager
 from relay_service import RelayManager
+from ac_service import ACManager
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)
@@ -24,6 +25,21 @@ app.add_middleware(
 # Configuration: Inisialisasi Manager
 wiz_manager = WizManager("devices.json")
 relay_manager = RelayManager("devices.json")
+ac_manager = ACManager("devices.json")
+
+@app.get("/")
+async def root():
+    return {
+        "status": "online",
+        "message": "WiZ and Relay Unified Backend is running",
+        "endpoints": {
+            "docs": "/docs",
+            "devices": "/devices",
+            "relay_status": "/relay/status",
+            "bulb_status": "/status",
+            "ac_status": "/ac/status"
+        }
+    }
 
 @app.post("/control")
 async def control_lights(request: ControlRequest):
@@ -91,8 +107,10 @@ async def list_devices():
     return {
         "wiz_count": len(wiz_manager.services),
         "relay_count": len(relay_manager.services),
+        "ac_count": len(ac_manager.services),
         "wiz_devices": [{"name": s.name, "ip": s.ip_address} for s in wiz_manager.services],
-        "relay_devices": [{"name": s.name, "ip": s.ip_address} for s in relay_manager.services]
+        "relay_devices": [{"name": s.name, "ip": s.ip_address} for s in relay_manager.services],
+        "ac_devices": [{"name": s.name, "ip": s.ip_address} for s in ac_manager.services]
     }
 
 # --- Relay Routes ---
@@ -126,6 +144,30 @@ async def control_all_relays(request: BulkControlRequest):
         raise HTTPException(status_code=404, detail=f"Device {request.device_name} tidak ditemukan")
     
     result = await service.control_all(request.state)
+    return result
+
+# --- AC Routes ---
+@app.get("/ac/status")
+async def get_ac_status():
+    try:
+        results = []
+        for service in ac_manager.services:
+            status = await service.get_status()
+            results.append(status)
+        return {"ac": results}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/ac/control")
+async def control_ac(request: ACControlRequest):
+    service = ac_manager.get_service_by_name(request.device_name)
+    if not service:
+        raise HTTPException(status_code=404, detail=f"Device {request.device_name} tidak ditemukan")
+
+    result = await service.control_ac(
+        power=request.power,
+        temperature=request.temperature
+    )
     return result
 
 if __name__ == "__main__":

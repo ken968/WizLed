@@ -3,8 +3,8 @@
 #include <ArduinoJson.h>
 
 // --- KONFIGURASI WIFI (Silakan isi kembali) ---
-const char* ssid = ""; 
-const char* password = "";
+const char* ssid = "robotic-local"; 
+const char* password = "12345678";
 
 // Pin Relay (ESP32-S3)
 //const int relayPins[] = {4, 5, 6, 10, 11, 12, 13, };
