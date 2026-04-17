@@ -42,11 +42,11 @@ def parse_warna(warna: Union[str, ColorModel]) -> ColorModel:
 # --- Relay Models ---
 class RelayControlRequest(BaseModel):
     device_name: str
-    channel: int
+    channel: Union[int, str]
     state: str  # "ON" atau "OFF"
 
 class BulkControlRequest(BaseModel):
-    device_name: str
+    device_name: str = "all"  # Default ke "all" untuk kontrol semua
     state: str  # "ON" atau "OFF"
 
 # --- AC Models ---

@@ -13,13 +13,18 @@
         {
             "name": "Relay",
             "ip": "192.168.1.161",
-            "channels": 4
+            "channels": 11
+        },
+        {
+            "name": "Switch",
+            "ip": "192.168.1.161",
+            "channels": "switch"
         }
     ],
     "ac_devices": [
         {
             "name": "AC",
-            "ip": "192.168.1.230"
+            "ip": "192.168.1.161"
         },
         {
             "name": "AC Central",

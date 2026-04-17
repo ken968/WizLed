@@ -13,14 +13,19 @@ class ACService:
 
     async def get_status(self):
         """Ambil status online dari ESP32 IR Controller."""
-        try:
-            async with httpx.AsyncClient() as client:
-                response = await client.get(f"{self.base_url}/status", timeout=5.0)
-                if response.status_code == 200:
-                    return response.json()
-                return {"error": "Gagal mengambil status AC", "code": response.status_code}
-        except Exception as e:
-            return {"error": str(e), "status": "failed"}
+        for attempt in range(2):  # Simple retry
+            try:
+                async with httpx.AsyncClient() as client:
+                    response = await client.get(f"{self.base_url}/status", timeout=5.0)
+                    if response.status_code == 200:
+                        data = response.json()
+                        logger.info(f"[AC] Status {self.name}: {data.get('power', 'N/A')}@ {data.get('temp', 'N/A')}C")
+                        return data
+                    logger.warning(f"[AC] Gagal ambil status {self.name} (Attempt {attempt+1}): {response.status_code}")
+            except Exception as e:
+                logger.error(f"[AC] Error ambil status {self.name} (Attempt {attempt+1}): {e}")
+            await asyncio.sleep(0.5)
+        return {"error": "Gagal mengambil status AC", "status": "offline"}
 
     async def control_ac(self, power: str, temperature: int):
         """Kirim perintah JSON ke AC."""
@@ -34,11 +39,12 @@ class ACService:
                 response = await client.post(
                     f"{self.base_url}/control",
                     json=payload,
-                    timeout=5.0
+                    timeout=8.0 # Increased timeout for IR sending
                 )
                 if response.status_code == 200:
-                    logger.info(f"[AC] Sukses kontrol {self.name}: {response.json()}")
-                    return response.json()
+                    result = response.json()
+                    logger.info(f"[AC] Sukses kontrol {self.name}: {result}")
+                    return result
                 
                 logger.error(f"[AC] Gagal kontrol {self.name}: {response.status_code} - {response.text}")
                 return {"error": "Gagal kontrol AC", "code": response.status_code}

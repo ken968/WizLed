@@ -2,11 +2,12 @@ import httpx
 import json
 import logging
 import asyncio
+from typing import Union
 
 logger = logging.getLogger(__name__)
 
 class RelayService:
-    def __init__(self, ip_address: str, name: str = "Unknown", channels: int = 4):
+    def __init__(self, ip_address: str, name: str = "Unknown", channels: int = 12):
         self.ip_address = ip_address
         self.name = name
         self.channels = channels
@@ -23,7 +24,7 @@ class RelayService:
         except Exception as e:
             return {"error": str(e), "status": "failed"}
 
-    async def control_channel(self, channel: int, state: str):
+    async def control_channel(self, channel: Union[int, str], state: str):
         """Kontrol satu channel relay."""
         try:
             payload = {
@@ -44,10 +45,18 @@ class RelayService:
             return {"error": str(e), "status": "failed"}
 
     async def control_all(self, state: str):
-        """Kirim perintah ke SEMUA channel SEKALIGUS secara paralel."""
-        tasks = [self.control_channel(i, state) for i in range(1, self.channels + 1)]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
-        return {"status": "success", "detail": results}
+        """Kirim perintah ke SEMUA channel secara BERURUTAN (Sequential)."""
+        responses = []
+        if isinstance(self.channels, int):
+            for i in range(1, self.channels + 1):
+                res = await self.control_channel(i, state)
+                responses.append(res)
+                await asyncio.sleep(0.05) # Jeda 50ms agar lebih cepat
+        elif self.channels == "switch":
+            res = await self.control_channel("switch", state)
+            responses.append(res)
+            
+        return {"status": "success", "detail": responses}
 
 class RelayManager:
     def __init__(self, config_path: str = "devices.json"):
@@ -56,11 +65,20 @@ class RelayManager:
             with open(config_path, "r") as f:
                 config = json.load(f)
                 for dev in config.get("relay_devices", []):
-                    channels = dev.get("channels", 4)
+                    channels = dev.get("channels", 11) # Default 11
                     self.services.append(RelayService(dev["ip"], dev["name"], channels=channels))
             logger.info(f"RelayManager diinisialisasi dengan {len(self.services)} perangkat.")
         except Exception as e:
             logger.error(f"Gagal memuat config relay: {e}")
+
+    async def control_everything(self, state: str):
+        """Kontrol SEMUA relay di SEMUA device secara berurutan."""
+        all_results = {}
+        for service in self.services:
+            logger.info(f"[RelayManager] Mengontrol device: {service.name}")
+            res = await service.control_all(state)
+            all_results[service.name] = res
+        return {"status": "success", "devices": all_results}
 
     def get_service_by_name(self, name: str):
         for service in self.services:

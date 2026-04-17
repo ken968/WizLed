@@ -4,17 +4,50 @@
 #include <ArduinoJson.h>
 #include <IRremoteESP8266.h>
 #include <IRsend.h>
-#include <IRac.h> 
+#include <ir_Daikin.h> // Header spesifik untuk Daikin64
+#include <IRrecv.h>
+#include <IRutils.h>
 
 const char* ssid = "robotic-local"; 
 const char* password = "12345678";
 
-const uint16_t kIrLed = 4; // Pin IR
-IRac ac(kIrLed);
+// --- KONFIGURASI PIN ---
+const uint16_t kIrLed = 4;   // Pin IR Transmitter
+const uint16_t kIrRecv = 14;  // Pin IR Receiver (DAT)
+const uint16_t kCaptureBufferSize = 1024;
+const uint8_t kTimeout = 50;
+
+// --- OBJEK IR ---
+IRDaikin64 ac(kIrLed);       // Class spesifik Daikin64
+IRrecv irrecv(kIrRecv, kCaptureBufferSize, kTimeout, true);
+decode_results results;
 WebServer server(80);
 
+// --- STATE MANAGEMENT ---
+bool currentPower = false;
+int currentTemp = 24;
+uint8_t currentMode = kDaikin64Cool;
+uint8_t currentFan = kDaikin64FanAuto;
+
+void syncWithLibrary() {
+  // Update library internal state from our global state
+  ac.setTemp(currentTemp);
+  ac.setMode(currentMode);
+  ac.setFan(currentFan);
+}
+
 void handleStatus() {
-  server.send(200, "application/json", "{\"status\":\"online\",\"device\":\"Daikin128_IR\"}");
+  StaticJsonDocument<300> doc;
+  doc["status"] = "online";
+  doc["device"] = "Daikin64_IR_Sync";
+  doc["power"] = currentPower ? "ON" : "OFF";
+  doc["temp"] = currentTemp;
+  doc["mode"] = currentMode;
+  doc["protocol"] = "DAIKIN64";
+  
+  String response;
+  serializeJson(doc, response);
+  server.send(200, "application/json", response);
 }
 
 void handleControl() {
@@ -25,54 +58,52 @@ void handleControl() {
 
   StaticJsonDocument<500> doc;
   DeserializationError error = deserializeJson(doc, server.arg("plain"));
-
   if (error) {
     server.send(400, "application/json", "{\"error\":\"JSON parse error\"}");
     return;
   }
 
-  // Set the Daikin128 Protocol
-  ac.next.protocol = decode_type_t::DAIKIN128; // Protocol 68
-
-  // Mapping Values
+  // 1. Update State & Power Logic
+  bool targetPower = currentPower;
   if (doc.containsKey("power")) {
-    String power = doc["power"];
-    ac.next.power = (power == "ON");
-  } else {
-    ac.next.power = true; // default
+    String p = doc["power"];
+    targetPower = (p == "ON");
   }
 
-  // Set Default Celsius
-  ac.next.celsius = true;
   if (doc.containsKey("temperature")) {
-    ac.next.degrees = doc["temperature"].as<int>();
+    currentTemp = doc["temperature"].as<int>();
+  }
+
+  syncWithLibrary();
+
+  // 2. Smart Toggle Logic
+  if (targetPower != currentPower) {
+    Serial.println("[IR] Power State Mismatch. Sending Toggle...");
+    ac.setPowerToggle(true); 
+    currentPower = targetPower; 
   } else {
-    ac.next.degrees = 24; // Default if omitted
+    ac.setPowerToggle(false);
+    Serial.println("[IR] Power State Matches. Updating parameters only.");
   }
+
+  // 3. Send IR
+  Serial.printf("[IR] Sending DAIKIN64 Power:%d Temp:%d\n", currentPower, currentTemp);
+  ac.send();
   
-  ac.next.mode = stdAc::opmode_t::kCool;
-  ac.next.fanspeed = stdAc::fanspeed_t::kAuto;
-
-  // Tembak burst
-  Serial.println("------------------------------------");
-  Serial.printf("[API] Power: %s\n", ac.next.power ? "ON" : "OFF");
-  Serial.printf("[API] Temp : %d Celsius\n", ac.next.degrees);
-  Serial.printf("[API] Mode : %d\n", ac.next.mode);
-  Serial.printf("[API] Fan  : %d\n", ac.next.fanspeed);
-  Serial.println("[API] Menembakkan IR Burst...");
-  for(int i = 0; i < 3; i++) {
-    ac.sendAc(); 
-    delay(150);
-  }
-
-  server.send(200, "application/json", "{\"status\":\"success\",\"message\":\"IR Sent\"}");
+  server.send(200, "application/json", "{\"status\":\"success\",\"power\":\"" + String(currentPower ? "ON":"OFF") + "\"}");
 }
 
 void setup() {
   Serial.begin(115200);
   delay(1000); 
 
-  Serial.println("\n[SYSTEM] ESP32 AC IR Server Starting...");
+  Serial.println("\n[SYSTEM] ESP32 Daikin64 IR Controller + Sync Starting...");
+
+  // Setup IR
+  ac.begin();
+  irrecv.enableIRIn(); 
+  Serial.printf("[WIFI] IR Transmitter Pin: %d\n", kIrLed);
+  Serial.printf("[WIFI] IR Receiver Pin   : %d\n", kIrRecv);
 
   WiFi.begin(ssid, password);
   Serial.print("Connecting to WiFi");
@@ -93,4 +124,16 @@ void setup() {
 
 void loop() {
   server.handleClient();
+
+  // --- LOGIKA IR RECEIVER ---
+  if (irrecv.decode(&results)) {
+    if (results.decode_type == DAIKIN64) {
+      Serial.println("[SYNC] Intercepted Daikin64 Signal!");
+      ac.setRaw(results.value);
+      currentTemp = ac.getTemp();
+      currentPower = !currentPower; 
+      Serial.printf("[SYNC] New State -> Power:%d Temp:%d\n", currentPower, currentTemp);
+    }
+    irrecv.resume();
+  }
 }

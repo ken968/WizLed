@@ -2,7 +2,10 @@ import logging
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
-from models import ControlRequest, parse_warna, RelayControlRequest, BulkControlRequest, ACControlRequest
+from models import (
+    ControlRequest, parse_warna, RelayControlRequest, 
+    BulkControlRequest, ACControlRequest
+)
 from bulb_service import WizManager
 from relay_service import RelayManager
 from ac_service import ACManager
@@ -131,19 +134,30 @@ async def control_relay(request: RelayControlRequest):
     if not service:
         raise HTTPException(status_code=404, detail=f"Device {request.device_name} tidak ditemukan")
     
-    if request.channel < 1 or request.channel > 4:
-         raise HTTPException(status_code=400, detail="Channel harus antara 1-4")
+    # Validasi channel: bisa int (1-11) atau string "switch"
+    if isinstance(request.channel, int):
+        if request.channel < 1 or request.channel > 11:
+            raise HTTPException(status_code=400, detail="Channel angka harus antara 1-11")
+    elif isinstance(request.channel, str):
+        if request.channel != "switch":
+            raise HTTPException(status_code=400, detail="Channel string hanya boleh 'switch'")
+    else:
+        raise HTTPException(status_code=400, detail="Channel harus berupa angka atau 'switch'")
 
     result = await service.control_channel(request.channel, request.state)
     return result
 
 @app.post("/relay/control-all")
 async def control_all_relays(request: BulkControlRequest):
-    service = relay_manager.get_service_by_name(request.device_name)
-    if not service:
-        raise HTTPException(status_code=404, detail=f"Device {request.device_name} tidak ditemukan")
-    
-    result = await service.control_all(request.state)
+    if request.device_name == "all":
+        # Kontrol semua device sekaligus
+        result = await relay_manager.control_everything(request.state)
+    else:
+        # Kontrol satu device spesifik
+        service = relay_manager.get_service_by_name(request.device_name)
+        if not service:
+            raise HTTPException(status_code=404, detail=f"Device {request.device_name} tidak ditemukan")
+        result = await service.control_all(request.state)
     return result
 
 # --- AC Routes ---
