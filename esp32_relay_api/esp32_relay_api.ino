@@ -9,11 +9,11 @@ const char* password = "12345678";
 // --- KONFIGURASI RELAY (ESP32-S3 SAFE PINS) ---
 // PIN 1-11 untuk channel angka 1-11
 // Menghindari 9-13 karena pin Flash/PSRAM
-const int relayPins[] = {7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17};
+const int relayPins[] = {4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14};
 const int numRelays = 11;
 
 // PIN khusus untuk channel bertipe string "switch"
-const int relayPinSwitch = 18;
+const int relayPinSwitch = 15;
 
 // Konfigurasi Active High (Sesuai Permintaan)
 #define RELAY_ON HIGH

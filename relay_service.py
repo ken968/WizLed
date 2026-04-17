@@ -45,18 +45,16 @@ class RelayService:
             return {"error": str(e), "status": "failed"}
 
     async def control_all(self, state: str):
-        """Kirim perintah ke SEMUA channel secara BERURUTAN (Sequential)."""
-        responses = []
+        """Kirim perintah ke SEMUA channel SEKALIGUS secara paralel (Serentak)."""
         if isinstance(self.channels, int):
-            for i in range(1, self.channels + 1):
-                res = await self.control_channel(i, state)
-                responses.append(res)
-                await asyncio.sleep(0.05) # Jeda 50ms agar lebih cepat
+            tasks = [self.control_channel(i, state) for i in range(1, self.channels + 1)]
         elif self.channels == "switch":
-            res = await self.control_channel("switch", state)
-            responses.append(res)
+            tasks = [self.control_channel("switch", state)]
+        else:
+            return {"error": "Tipe channel tidak dikenali", "channels": self.channels}
             
-        return {"status": "success", "detail": responses}
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        return {"status": "success", "detail": results}
 
 class RelayManager:
     def __init__(self, config_path: str = "devices.json"):
